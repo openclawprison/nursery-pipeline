@@ -23,9 +23,10 @@ class SunoService {
         customMode: true,
         instrumental: false,
         model: 'V5',
-        prompt: lyrics,        // In custom mode, prompt = lyrics
+        prompt: lyrics,
         style: style,
-        title: title
+        title: title,
+        callBackUrl: 'https://example.com/callback'
       },
       {
         headers: {
