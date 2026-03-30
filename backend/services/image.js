@@ -43,16 +43,12 @@ class ImageService {
   }
 
   async _generateSingleImage(prompt, outputPath, seed, width, height) {
-    // fal.ai queue API requires params inside "input" wrapper
     const submitResponse = await axios.post(
       `${this.baseUrl}/${this.modelId}`,
       {
         input: {
           prompt: prompt,
-          image_size: {
-            width: width,
-            height: height
-          },
+          image_size: { width: width, height: height },
           num_images: 1,
           seed: seed + 42,
           enable_safety_checker: true,
@@ -67,52 +63,46 @@ class ImageService {
       }
     );
 
-    console.log(`[IMAGE] Submit response status: ${submitResponse.status}, keys: ${Object.keys(submitResponse.data || {}).join(', ')}`);
+    const data = submitResponse.data;
+    console.log(`[IMAGE] Submit OK. Status: ${data.status}, request_id: ${data.request_id}`);
 
-    const requestId = submitResponse.data?.request_id;
+    // Use the URLs that fal.ai gives us directly
+    const statusUrl = data.status_url;
+    const responseUrl = data.response_url;
 
-    if (requestId) {
-      return await this._pollForResult(requestId, outputPath);
+    if (!statusUrl || !responseUrl) {
+      throw new Error('No status_url/response_url in submit response');
     }
 
-    // Direct/synchronous response — try to extract image
-    const imageUrl = this._extractImageUrl(submitResponse.data);
-    if (imageUrl) {
-      await this._download(imageUrl, outputPath);
-      return outputPath;
-    }
-
-    throw new Error('No request_id or image in response: ' + JSON.stringify(submitResponse.data).substring(0, 300));
+    // Poll using fal.ai's provided URLs
+    return await this._pollForResult(statusUrl, responseUrl, outputPath);
   }
 
-  async _pollForResult(requestId, outputPath, maxAttempts = 60) {
+  async _pollForResult(statusUrl, responseUrl, outputPath, maxAttempts = 60) {
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        // Check status
-        const statusRes = await axios.get(
-          `${this.baseUrl}/${this.modelId}/requests/${requestId}/status`,
-          { headers: { 'Authorization': `Key ${this.apiKey}` } }
-        );
+        const statusRes = await axios.get(statusUrl, {
+          headers: { 'Authorization': `Key ${this.apiKey}` }
+        });
 
         const status = statusRes.data?.status;
 
         if (status === 'COMPLETED') {
-          // Fetch result
-          const resultRes = await axios.get(
-            `${this.baseUrl}/${this.modelId}/requests/${requestId}`,
-            { headers: { 'Authorization': `Key ${this.apiKey}` } }
-          );
+          // Fetch the actual result
+          const resultRes = await axios.get(responseUrl, {
+            headers: { 'Authorization': `Key ${this.apiKey}` }
+          });
 
           const imageUrl = this._extractImageUrl(resultRes.data);
           if (imageUrl) {
             await this._download(imageUrl, outputPath);
             return outputPath;
           }
-          throw new Error('Completed but no image URL. Response: ' + JSON.stringify(resultRes.data).substring(0, 300));
+          throw new Error('Completed but no image URL. Keys: ' + Object.keys(resultRes.data || {}).join(', '));
         }
 
         if (status === 'FAILED') {
-          throw new Error('Flux generation failed: ' + (statusRes.data?.error || 'Unknown'));
+          throw new Error('Flux generation failed: ' + JSON.stringify(statusRes.data?.error || 'Unknown'));
         }
 
         console.log(`[IMAGE] Poll ${i + 1}... status: ${status}`);
@@ -126,20 +116,12 @@ class ImageService {
     throw new Error('Image generation timed out');
   }
 
-  /**
-   * Extract image URL from various fal.ai response formats
-   */
   _extractImageUrl(data) {
     if (!data) return null;
-    // Standard format: { images: [{ url: "..." }] }
     if (data.images?.[0]?.url) return data.images[0].url;
-    // Alternative: { output: { images: [...] } }
     if (data.output?.images?.[0]?.url) return data.output.images[0].url;
-    // Alternative: { data: { images: [...] } }
     if (data.data?.images?.[0]?.url) return data.data.images[0].url;
-    // Alternative: { image: { url: "..." } }
     if (data.image?.url) return data.image.url;
-    // Alternative: flat url
     if (data.image_url) return data.image_url;
     return null;
   }
