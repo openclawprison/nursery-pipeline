@@ -50,13 +50,11 @@ class ImageService {
     const submitUrl = `${this.baseUrl}/${this.modelId}`;
 
     const body = {
-      input: {
-        prompt: prompt,
-        image_size: "landscape_16_9",
-        num_images: 1,
-        seed: seed + 42,
-        enable_safety_checker: true
-      }
+      prompt: prompt,
+      image_size: "landscape_16_9",
+      num_images: 1,
+      seed: seed + 42,
+      enable_safety_checker: true
     };
 
     console.log(`[IMAGE] POST ${submitUrl}`);
