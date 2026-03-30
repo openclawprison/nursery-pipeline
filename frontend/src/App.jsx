@@ -479,9 +479,9 @@ const RESOLUTIONS = [
 ]
 
 const VIDEO_PROVIDERS = [
-  { label: 'WAN 2.1 — cheapest (~$0.20/clip)', value: 'wan21' },
+  { label: 'WAN 2.6 — recommended, 10s clips (~$0.40/clip)', value: 'wan26' },
+  { label: 'WAN 2.1 — cheapest, 5s clips (~$0.20/clip)', value: 'wan21' },
   { label: 'Seedance 1.0 Lite (~$0.15/clip)', value: 'seedance1' },
-  { label: 'Seedance 2.0 — best value (~$0.05/clip)', value: 'seedance2' },
   { label: 'Kling 2.5 Turbo — premium (~$0.35/clip)', value: 'kling' }
 ]
 
@@ -494,8 +494,7 @@ export default function App() {
   const [channelName, setChannelName] = useState('')
   const [language, setLanguage] = useState('ur')
   const [resolution, setResolution] = useState('1280x720')
-  const [videoProvider, setVideoProvider] = useState('wan21')
-  const [subtitles, setSubtitles] = useState(true)
+  const [videoProvider, setVideoProvider] = useState('wan26')
 
   const [jobs, setJobs] = useState([])
   const [activeJob, setActiveJob] = useState(null)
@@ -541,7 +540,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lyrics, songTitle, songStyle, visualStyle, channelName, language, resolution, videoProvider, imageModel: 'dev', subtitles })
+        body: JSON.stringify({ lyrics, songTitle, songStyle, visualStyle, channelName, language, resolution, videoProvider, imageModel: 'dev' })
       })
       const data = await res.json()
       if (data.success) {
@@ -665,24 +664,9 @@ export default function App() {
                   <option key={v.value} value={v.value}>{v.label}</option>
                 ))}
               </select>
-              <div className="hint">
-                {videoProvider === 'seedance2' ? 'Requires ModelsLab API key (modelslab.com)' :
-                 'Uses your fal.ai key'}
-              </div>
+              <div className="hint">Uses your fal.ai key</div>
 
               <label>Channel Name (optional)</label>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '16px', marginBottom: '4px' }}>
-                <label style={{ margin: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    checked={subtitles}
-                    onChange={e => setSubtitles(e.target.checked)}
-                    style={{ width: 'auto', accentColor: 'var(--accent)', cursor: 'pointer' }}
-                  />
-                  Show subtitles (lyrics on screen)
-                </label>
-              </div>
               <input
                 type="text"
                 placeholder="e.g. Nursery Rhymes"

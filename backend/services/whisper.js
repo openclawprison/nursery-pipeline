@@ -93,9 +93,9 @@ class WhisperService {
       segmentIds: []
     };
 
-    const TARGET_SCENE_DURATION = 7; // seconds - ideal scene length
-    const MIN_SCENE_DURATION = 4;
-    const MAX_SCENE_DURATION = 12;
+    const TARGET_SCENE_DURATION = 10; // seconds - match WAN 2.6 clip length
+    const MIN_SCENE_DURATION = 7;
+    const MAX_SCENE_DURATION = 14;
 
     for (const seg of segments) {
       const currentDuration = currentScene.end - currentScene.start;

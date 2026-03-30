@@ -176,7 +176,7 @@ class Pipeline {
       this._updateStep(jobId, 'video', 'processing', 'Animating scenes...');
       this._updateJob(jobId, { currentStep: 'video', progress: 65 });
 
-      const scenesWithVideo = await this.services.video.generateVideos(scenesWithImages, dir, videoProvider || 'wan21');
+      const scenesWithVideo = await this.services.video.generateVideos(scenesWithImages, dir, videoProvider || 'wan26');
 
       const videoCount = scenesWithVideo.filter(s => s.videoPath).length;
       this._updateStep(jobId, 'video', 'complete',
@@ -194,11 +194,7 @@ class Pipeline {
         timestamps.duration,
         dir,
         {
-          title: songTitle,
-          channelName: channelName || 'Nursery Rhymes',
-          width: res.width,
-          height: res.height,
-          subtitles: subtitles !== false
+          title: songTitle
         }
       );
 
