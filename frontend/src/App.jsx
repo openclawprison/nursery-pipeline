@@ -495,6 +495,7 @@ export default function App() {
   const [language, setLanguage] = useState('ur')
   const [resolution, setResolution] = useState('1280x720')
   const [videoProvider, setVideoProvider] = useState('wan21')
+  const [subtitles, setSubtitles] = useState(true)
 
   const [jobs, setJobs] = useState([])
   const [activeJob, setActiveJob] = useState(null)
@@ -540,7 +541,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lyrics, songTitle, songStyle, visualStyle, channelName, language, resolution, videoProvider })
+        body: JSON.stringify({ lyrics, songTitle, songStyle, visualStyle, channelName, language, resolution, videoProvider, imageModel: 'dev', subtitles })
       })
       const data = await res.json()
       if (data.success) {
@@ -670,6 +671,18 @@ export default function App() {
               </div>
 
               <label>Channel Name (optional)</label>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '16px', marginBottom: '4px' }}>
+                <label style={{ margin: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={subtitles}
+                    onChange={e => setSubtitles(e.target.checked)}
+                    style={{ width: 'auto', accentColor: 'var(--accent)', cursor: 'pointer' }}
+                  />
+                  Show subtitles (lyrics on screen)
+                </label>
+              </div>
               <input
                 type="text"
                 placeholder="e.g. Nursery Rhymes"

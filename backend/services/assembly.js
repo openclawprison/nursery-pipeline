@@ -21,6 +21,7 @@ class AssemblyService {
     console.log('[ASSEMBLY] Starting video assembly...');
     const width = options.width || 1280;
     const height = options.height || 720;
+    const enableSubtitles = options.subtitles !== false; // default ON
 
     const validScenes = scenes.filter(s => s.videoPath && fs.existsSync(s.videoPath));
 
@@ -28,11 +29,14 @@ class AssemblyService {
       throw new Error('No valid video clips to assemble');
     }
 
-    console.log(`[ASSEMBLY] Assembling ${validScenes.length} clips with audio`);
+    console.log(`[ASSEMBLY] Assembling ${validScenes.length} clips, subtitles: ${enableSubtitles ? 'ON' : 'OFF'}`);
 
-    // Step 1: Create subtitle file (ASS format for styled Urdu subtitles)
-    const subtitlePath = path.join(outputDir, 'subtitles.ass');
-    await this._createSubtitleFile(scenes, subtitlePath, width, height);
+    // Step 1: Create subtitle file (only if enabled)
+    let subtitlePath = null;
+    if (enableSubtitles) {
+      subtitlePath = path.join(outputDir, 'subtitles.ass');
+      await this._createSubtitleFile(scenes, subtitlePath, width, height);
+    }
 
     // Step 2: Create a concat file for FFmpeg
     const concatPath = path.join(outputDir, 'concat.txt');
@@ -45,7 +49,7 @@ class AssemblyService {
     // Step 4: Get actual video duration
     const videoDuration = await this._getMediaDuration(rawVideoPath);
 
-    // Step 5: Overlay audio + subtitles and produce final output
+    // Step 5: Overlay audio (+ subtitles if enabled) and produce final output
     const finalPath = path.join(outputDir, `${this._sanitizeFilename(options.title || 'nursery_rhyme')}.mp4`);
     await this._finalMix(rawVideoPath, audioPath, subtitlePath, finalPath, audioDuration, width, height);
 
@@ -100,28 +104,70 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   }
 
   /**
-   * Create FFmpeg concat demuxer file
-   * Handles timing by adjusting clip durations to match scene timings
+   * Pre-process clips: loop short clips to fill scene duration, trim long ones
+   * Then create concat file from processed clips
    */
   async _createConcatFile(scenes, outputPath, targetDuration) {
+    const processedDir = path.join(path.dirname(outputPath), 'processed_clips');
+    if (!fs.existsSync(processedDir)) fs.mkdirSync(processedDir, { recursive: true });
+
     const lines = [];
 
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i];
       const clipPath = path.resolve(scene.videoPath);
-
-      // Calculate how long this clip should play
       const sceneDuration = scene.end - scene.start;
+      const processedPath = path.join(processedDir, `proc_${String(i).padStart(3, '0')}.mp4`);
 
-      lines.push(`file '${clipPath}'`);
-      // Use outpoint to trim clips to desired duration
-      lines.push(`duration ${sceneDuration.toFixed(3)}`);
+      // Get actual clip duration
+      const clipDuration = await this._getMediaDuration(clipPath);
+      console.log(`[ASSEMBLY] Scene ${i}: need ${sceneDuration.toFixed(1)}s, clip is ${clipDuration.toFixed(1)}s`);
+
+      if (clipDuration <= 0) {
+        console.log(`[ASSEMBLY] Skipping scene ${i} — invalid clip`);
+        continue;
+      }
+
+      try {
+        if (clipDuration >= sceneDuration) {
+          // Clip is long enough — just trim it
+          const trimCmd = [
+            this.ffmpegPath, '-y',
+            '-i', `"${clipPath}"`,
+            '-t', sceneDuration.toFixed(3),
+            '-c', 'copy',
+            `"${processedPath}"`
+          ].join(' ');
+          await this._runFFmpeg(trimCmd);
+        } else {
+          // Clip is too short — loop it to fill the duration
+          const loopCount = Math.ceil(sceneDuration / clipDuration);
+          const loopCmd = [
+            this.ffmpegPath, '-y',
+            '-stream_loop', String(loopCount - 1),
+            '-i', `"${clipPath}"`,
+            '-t', sceneDuration.toFixed(3),
+            '-c:v', 'libx264',
+            '-preset', 'fast',
+            '-crf', '23',
+            '-an',
+            `"${processedPath}"`
+          ].join(' ');
+          await this._runFFmpeg(loopCmd);
+        }
+
+        lines.push(`file '${path.resolve(processedPath)}'`);
+      } catch (err) {
+        console.error(`[ASSEMBLY] Failed to process clip ${i}:`, err.message);
+        // Fallback: use original clip as-is
+        lines.push(`file '${clipPath}'`);
+        lines.push(`duration ${sceneDuration.toFixed(3)}`);
+      }
     }
 
-    // Add the last file again (FFmpeg concat quirk)
-    if (scenes.length > 0) {
-      const lastClip = path.resolve(scenes[scenes.length - 1].videoPath);
-      lines.push(`file '${lastClip}'`);
+    // Add last file again (FFmpeg concat quirk)
+    if (lines.length > 0) {
+      lines.push(lines[lines.length - 1]);
     }
 
     fs.writeFileSync(outputPath, lines.join('\n'), 'utf-8');
@@ -156,9 +202,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
    * Final mix: video + audio + subtitles
    */
   async _finalMix(videoPath, audioPath, subtitlePath, outputPath, audioDuration, width = 1280, height = 720) {
-    // Use the shorter of video/audio duration to avoid blank frames
     const videoDuration = await this._getMediaDuration(videoPath);
     const duration = Math.min(videoDuration, audioDuration);
+
+    // Build video filter: subtitles + scale, or just scale
+    let vf;
+    if (subtitlePath) {
+      vf = `"ass='${subtitlePath.replace(/'/g, "'\\''").replace(/\\/g, '/')}'",scale=${width}:${height}`;
+      console.log('[ASSEMBLY] Final mix: video + audio + subtitles');
+    } else {
+      vf = `scale=${width}:${height}`;
+      console.log('[ASSEMBLY] Final mix: video + audio (no subtitles)');
+    }
 
     const cmd = [
       this.ffmpegPath,
@@ -166,8 +221,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       '-i', `"${videoPath}"`,
       '-i', `"${audioPath}"`,
       '-t', duration.toFixed(2),
-      // Burn subtitles into video
-      '-vf', `"ass='${subtitlePath.replace(/'/g, "'\\''").replace(/\\/g, '/')}'",scale=${width}:${height}`,
+      '-vf', vf,
       '-c:v', 'libx264',
       '-preset', 'medium',
       '-crf', '20',
@@ -180,7 +234,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       `"${outputPath}"`
     ].join(' ');
 
-    console.log('[ASSEMBLY] Final mix: video + audio + subtitles...');
     await this._runFFmpeg(cmd);
   }
 
@@ -204,9 +257,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   _sanitizeFilename(name) {
     return name
-      .replace(/[^a-zA-Z0-9\u0600-\u06FF_\- ]/g, '')
+      .replace(/[^a-zA-Z0-9_\- ]/g, '')
       .replace(/\s+/g, '_')
-      .substring(0, 100);
+      .substring(0, 100) || 'nursery_rhyme';
   }
 
   async _runFFmpeg(cmd) {

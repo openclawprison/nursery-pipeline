@@ -91,7 +91,7 @@ class Pipeline {
     const job = jobs.get(jobId);
     if (!job) return;
 
-    const { lyrics, songTitle, songStyle, visualStyle, channelName, language, resolution, videoProvider } = job.input;
+    const { lyrics, songTitle, songStyle, visualStyle, channelName, language, resolution, videoProvider, imageModel, subtitles } = job.input;
     const dir = job.outputDir;
 
     // Parse resolution (e.g., "1920x1080" or default)
@@ -162,7 +162,8 @@ class Pipeline {
 
       const scenesWithImages = await this.services.image.generateImages(enrichedScenes, dir, {
         width: res.width,
-        height: res.height
+        height: res.height,
+        imageModel: imageModel || 'dev'
       });
 
       const imageCount = scenesWithImages.filter(s => s.imagePath).length;
@@ -196,7 +197,8 @@ class Pipeline {
           title: songTitle,
           channelName: channelName || 'Nursery Rhymes',
           width: res.width,
-          height: res.height
+          height: res.height,
+          subtitles: subtitles !== false
         }
       );
 

@@ -7,7 +7,7 @@ function createRoutes(pipeline) {
 
   // POST /api/generate - Start a new video generation job
   router.post('/generate', (req, res) => {
-    const { lyrics, songTitle, songStyle, visualStyle, channelName, language, resolution, videoProvider } = req.body;
+    const { lyrics, songTitle, songStyle, visualStyle, channelName, language, resolution, videoProvider, imageModel, subtitles } = req.body;
 
     if (!lyrics || !lyrics.trim()) {
       return res.status(400).json({ error: 'Lyrics are required' });
@@ -25,7 +25,9 @@ function createRoutes(pipeline) {
         channelName: channelName?.trim() || '',
         language: language?.trim() || 'auto',
         resolution: resolution?.trim() || '1280x720',
-        videoProvider: videoProvider?.trim() || 'wan21'
+        videoProvider: videoProvider?.trim() || 'wan21',
+        imageModel: imageModel?.trim() || 'dev',
+        subtitles: subtitles !== false
       });
 
       res.json({
