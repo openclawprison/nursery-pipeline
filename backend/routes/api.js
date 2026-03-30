@@ -86,8 +86,8 @@ function createRoutes(pipeline) {
       return res.status(404).json({ error: 'Video not ready yet' });
     }
 
-    const filename = path.basename(job.finalVideoPath);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    const safeFilename = 'nursery_rhyme_' + req.params.id.substring(0, 8) + '.mp4';
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
     res.setHeader('Content-Type', 'video/mp4');
     fs.createReadStream(job.finalVideoPath).pipe(res);
   });
