@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: nursery-pipeline
+    runtime: docker
+    plan: standard
+    envVars:
+      - key: SUNO_API_KEY
+        sync: false
+      - key: FAL_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PORT
+        value: 3001
+      - key: OUTPUT_DIR
+        value: ./output
+    disk:
+      name: video-output
+      mountPath: /app/backend/output
+      sizeGB: 10
