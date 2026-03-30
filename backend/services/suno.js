@@ -9,26 +9,23 @@ class SunoService {
   }
 
   /**
-   * Generate a song from lyrics using Suno API
-   * @param {string} lyrics - The Urdu lyrics
-   * @param {string} style - Music style tags (e.g., "children's nursery rhyme, female vocalist, happy, Urdu")
-   * @param {string} title - Song title
-   * @param {string} outputDir - Directory to save the audio file
-   * @returns {object} { audioPath, duration, sunoId }
+   * Generate a song from lyrics using sunoapi.org
+   * Docs: https://docs.sunoapi.org/suno-api/generate-music
    */
   async generateSong(lyrics, style, title, outputDir) {
     console.log('[SUNO] Generating song:', title);
 
     // Step 1: Submit generation request
+    // customMode=true, instrumental=false → requires style, prompt (lyrics), title
     const response = await axios.post(
-      `${this.baseUrl}/api/custom_generate`,
+      `${this.baseUrl}/api/v1/generate`,
       {
-        prompt: lyrics,
-        tags: style,
-        title: title,
-        make_instrumental: false,
-        model: 'chirp-v4',  // Use latest available model
-        wait_audio: false
+        customMode: true,
+        instrumental: false,
+        model: 'V5',
+        prompt: lyrics,        // In custom mode, prompt = lyrics
+        style: style,
+        title: title
       },
       {
         headers: {
@@ -38,30 +35,30 @@ class SunoService {
       }
     );
 
-    const taskIds = response.data;
-    if (!taskIds || taskIds.length === 0) {
-      throw new Error('Suno API returned no task IDs');
+    // Response: { code: 200, msg: "success", data: { taskId: "xxx" } }
+    if (response.data?.code !== 200 || !response.data?.data?.taskId) {
+      throw new Error(`Suno API error: ${response.data?.msg || JSON.stringify(response.data)}`);
     }
 
-    // Suno typically returns 2 variations - we'll use the first
-    const taskId = Array.isArray(taskIds) ? taskIds[0].id || taskIds[0] : taskIds.id || taskIds;
-    console.log('[SUNO] Task submitted, ID:', taskId);
+    const taskId = response.data.data.taskId;
+    console.log('[SUNO] Task submitted, taskId:', taskId);
 
     // Step 2: Poll for completion
-    const audioData = await this._pollForCompletion(taskId);
+    // Stream URL available in ~30-40s, download URL in ~2-3 min
+    const result = await this._pollForCompletion(taskId);
 
     // Step 3: Download audio file
     const audioPath = path.join(outputDir, 'song.mp3');
-    await this._downloadFile(audioData.audio_url, audioPath);
+    await this._downloadFile(result.audioUrl, audioPath);
 
-    console.log('[SUNO] Song generated and saved to:', audioPath);
+    console.log('[SUNO] Song saved:', audioPath, `(${result.duration}s)`);
 
     return {
       audioPath,
-      duration: audioData.duration || null,
-      sunoId: taskId,
-      audioUrl: audioData.audio_url,
-      metadata: audioData
+      duration: result.duration || null,
+      sunoId: result.id,
+      audioUrl: result.audioUrl,
+      metadata: result
     };
   }
 
@@ -69,55 +66,76 @@ class SunoService {
     for (let i = 0; i < maxAttempts; i++) {
       try {
         const response = await axios.get(
-          `${this.baseUrl}/api/get?ids=${taskId}`,
+          `${this.baseUrl}/api/v1/generate/record-info`,
           {
+            params: { taskId },
             headers: {
               'Authorization': `Bearer ${this.apiKey}`
             }
           }
         );
 
-        const data = Array.isArray(response.data) ? response.data[0] : response.data;
+        const data = response.data?.data;
+        if (!data) {
+          console.log(`[SUNO] Poll ${i + 1}: no data yet`);
+          await this._sleep(interval);
+          continue;
+        }
 
-        if (data.status === 'complete' || data.status === 'streaming') {
-          if (data.audio_url) {
-            console.log('[SUNO] Generation complete!');
-            return data;
+        const status = data.status;
+
+        if (status === 'SUCCESS') {
+          // sunoData is an array — Suno returns 2 variations, use the first
+          const songs = data.response?.sunoData;
+          if (songs && songs.length > 0) {
+            const song = songs[0];
+            if (song.audioUrl) {
+              console.log('[SUNO] Generation complete!');
+              return {
+                id: song.id,
+                audioUrl: song.audioUrl,
+                streamAudioUrl: song.streamAudioUrl,
+                imageUrl: song.imageUrl,
+                duration: song.duration,
+                title: song.title,
+                tags: song.tags
+              };
+            }
           }
+          throw new Error('Suno returned SUCCESS but no audio URL');
         }
 
-        if (data.status === 'error') {
-          throw new Error(`Suno generation failed: ${data.error_message || 'Unknown error'}`);
+        if (status === 'FAILED' || status === 'ERROR') {
+          throw new Error(`Suno generation failed: ${data.errorMessage || 'Unknown error'}`);
         }
 
-        console.log(`[SUNO] Polling... attempt ${i + 1}/${maxAttempts}, status: ${data.status}`);
+        // Still running — RUNNING, PENDING, QUEUED, etc.
+        console.log(`[SUNO] Poll ${i + 1}/${maxAttempts}, status: ${status}`);
+
       } catch (err) {
         if (err.response?.status === 429) {
-          console.log('[SUNO] Rate limited, waiting longer...');
+          console.log('[SUNO] Rate limited, waiting...');
           await this._sleep(15000);
           continue;
         }
-        throw err;
+        // If it's our own thrown error, rethrow
+        if (err.message.includes('failed') || err.message.includes('Failed') || err.message.includes('no audio')) {
+          throw err;
+        }
+        console.log(`[SUNO] Poll error: ${err.message}, retrying...`);
       }
 
       await this._sleep(interval);
     }
 
-    throw new Error('Suno generation timed out after ' + (maxAttempts * interval / 1000) + ' seconds');
+    throw new Error('Suno generation timed out after ' + (maxAttempts * interval / 1000) + 's');
   }
 
   async _downloadFile(url, outputPath) {
-    const response = await axios({
-      method: 'GET',
-      url: url,
-      responseType: 'stream'
-    });
-
     const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
+    const response = await axios({ method: 'GET', url, responseType: 'stream' });
     const writer = fs.createWriteStream(outputPath);
     response.data.pipe(writer);
 
