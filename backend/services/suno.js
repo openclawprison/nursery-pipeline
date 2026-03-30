@@ -26,7 +26,7 @@ class SunoService {
         prompt: lyrics,
         style: style,
         title: title,
-        callBackUrl: 'https://example.com/callback'
+        callBackUrl: 'https://example.com/callback'  // Required by API, we poll instead
       },
       {
         headers: {

@@ -95,33 +95,26 @@ Respond in this exact JSON format (no markdown, no backticks, just raw JSON):
     const defaultStyle = "cute cartoon illustration for children, bright pastel colors, rounded characters with big eyes, Pakistani/South Asian setting, watercolor texture, children's book illustration style";
     const style = visualStyle || defaultStyle;
 
-    return `You are an expert children's animation director creating scene descriptions for an Urdu nursery rhyme video titled "${songTitle}".
+    return `You are creating scene visuals for a children's nursery rhyme video titled "${songTitle}".
 
-Your job is to generate TWO prompts per scene:
+MOST IMPORTANT RULE: Each scene MUST directly and literally illustrate what the lyrics are saying. 
+- If lyrics say "bear went on a train" → show a bear on a train
+- If lyrics say "fish is queen of water" → show a fish wearing a crown in water
+- Do NOT invent scenes that are not described in the lyrics
+- Do NOT add random characters or settings that the lyrics don't mention
+- Follow the STORY of the lyrics scene by scene
 
-1. IMAGE PROMPT: A detailed prompt for an AI image generator (Flux). This should describe:
-   - The visual scene that matches the lyrics
-   - Characters, objects, setting, colors
-   - Must maintain this consistent visual style across ALL scenes: "${style}"
-   - Include specific details about expressions, poses, and environment
-   - Always include "children's illustration" and style keywords for consistency
-   - IMPORTANT: Describe the scene, NOT the text/lyrics. Don't include any text in the image.
+VISUAL STYLE (use this EXACT style for every single scene): "${style}"
 
-2. MOTION PROMPT: A short prompt for AI video generation (Kling image-to-video). This should describe:
-   - Simple, gentle movements (children's content should be smooth, not jarring)
-   - Examples: "fish swimming gently in water", "character waving hand slowly", "stars twinkling in sky"
-   - Keep motions simple to avoid AI artifacts
-   - Max 15 words
+CONSISTENCY RULES:
+- Same characters must look identical across all scenes (same colors, proportions, style)
+- Same background style and color palette throughout
+- If a character appears in scene 1 and scene 5, they must look the same
 
-3. SUBTITLE TEXT: The original Urdu lyrics for this scene segment, cleaned up for display.
-
-Rules:
-- Every scene MUST have the same art style, color palette, and character design approach
-- Characters should look consistent across scenes (same style of eyes, proportions)
-- Scenes should flow naturally from one to the next
-- Use bright, happy, engaging visuals appropriate for children aged 1-6
-- Include Pakistani/South Asian cultural elements where appropriate
-- Never include any text, watermarks, or UI elements in image prompts`;
+For each scene provide:
+1. IMAGE PROMPT: A detailed description of EXACTLY what the lyrics describe, rendered in the visual style above. No text or words in the image. Be very specific about what characters are doing.
+2. MOTION PROMPT: Simple gentle movement matching the lyrics action. Max 15 words. Keep it simple.
+3. SUBTITLE TEXT: The original lyrics for this scene, cleaned up for display.`;
   }
 
   _fallbackPrompt(text, style) {
